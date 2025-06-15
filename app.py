@@ -1,8 +1,30 @@
+I see you're having issues with the requirements installation. The `rembg` library can sometimes be problematic due to its dependencies. Let me provide you with an updated version that has more flexible dependencies and includes an alternative approach:
+
+**Option 1: Simplified Version (without background removal)**
+
+First, let's try a simplified `requirements.txt`:
+
+```txt
+streamlit==1.31.0
+Pillow==10.2.0
+numpy==1.24.3
+```
+
+And here's the updated application code with optional background removal:
+
+```python
 import streamlit as st
-from PIL import Image
+from PIL import Image, ImageFilter
 import io
-from rembg import remove
 import numpy as np
+
+# Try to import rembg, but make it optional
+try:
+    from rembg import remove
+    REMBG_AVAILABLE = True
+except ImportError:
+    REMBG_AVAILABLE = False
+    st.warning("Background removal feature is not available. Install 'rembg' to enable it.")
 
 # Configure the Streamlit page
 st.set_page_config(
@@ -23,19 +45,30 @@ st.markdown("""
     .stButton > button:hover {
         background-color: #45a049;
     }
+    .success-box {
+        padding: 1rem;
+        border-radius: 0.5rem;
+        background-color: #d4edda;
+        border: 1px solid #c3e6cb;
+        color: #155724;
+        margin: 1rem 0;
+    }
     </style>
 """, unsafe_allow_html=True)
 
 # Title and description
 st.title("🖼️ Image Manipulation Studio")
-st.markdown("Upload an image and use our tools to remove backgrounds, resize, or convert formats.")
+st.markdown("Upload an image and use our tools to manipulate, resize, or convert formats.")
 
 # Sidebar for navigation
 st.sidebar.title("Navigation")
-tool_choice = st.sidebar.radio(
-    "Select a tool:",
-    ["🎨 Background Removal", "📐 Image Resizing", "🔄 Format Conversion"]
-)
+tools = ["📐 Image Resizing", "🔄 Format Conversion"]
+if REMBG_AVAILABLE:
+    tools.insert(0, "🎨 Background Removal")
+else:
+    tools.append("🎨 Simple Background Effects")
+
+tool_choice = st.sidebar.radio("Select a tool:", tools)
 
 # Function to convert PIL Image to bytes
 def pil_to_bytes(img, format="PNG"):
@@ -54,8 +87,27 @@ def display_image_info(image):
     with col3:
         st.metric("Format", image.format if image.format else "Unknown")
 
+# Function for simple background effects (alternative to rembg)
+def apply_simple_background_effect(image, effect_type="blur"):
+    """Apply simple background effects without ML-based removal"""
+    if effect_type == "blur":
+        # Apply Gaussian blur
+        blurred = image.filter(ImageFilter.GaussianBlur(radius=10))
+        return blurred
+    elif effect_type == "grayscale":
+        # Convert to grayscale
+        return image.convert("L").convert("RGBA")
+    elif effect_type == "white":
+        # Create white background
+        white_bg = Image.new("RGBA", image.size, (255, 255, 255, 255))
+        if image.mode == "RGBA":
+            white_bg.paste(image, (0, 0), image)
+            return white_bg
+        return image
+    return image
+
 # Background Removal Tool
-if tool_choice == "🎨 Background Removal":
+if tool_choice == "🎨 Background Removal" and REMBG_AVAILABLE:
     st.header("Background Removal Tool")
     st.info("Upload an image to automatically remove its background. Works best with images that have clear subjects.")
     
@@ -101,6 +153,69 @@ if tool_choice == "🎨 Background Removal":
                         label="Download Image (PNG)",
                         data=output_bytes,
                         file_name="background_removed.png",
+                        mime="image/png"
+                    )
+                    
+                except Exception as e:
+                    st.error(f"An error occurred: {str(e)}")
+
+# Simple Background Effects (Alternative when rembg is not available)
+elif tool_choice == "🎨 Simple Background Effects":
+    st.header("Simple Background Effects")
+    st.info("Apply simple background effects to your images. For advanced background removal, install the 'rembg' package.")
+    
+    uploaded_file = st.file_uploader(
+        "Choose an image file",
+        type=['png', 'jpg', 'jpeg', 'webp', 'bmp'],
+        key="bg_effects"
+    )
+    
+    if uploaded_file is not None:
+        # Create two columns for before/after
+        col1, col2 = st.columns(2)
+        
+        # Load and display original image
+        with col1:
+            st.subheader("Original Image")
+            image = Image.open(uploaded_file)
+            st.image(image, use_column_width=True)
+            display_image_info(image)
+        
+        # Effect selection
+        effect_type = st.selectbox(
+            "Choose an effect:",
+            ["Blur Background", "Grayscale", "White Background"]
+        )
+        
+        effect_map = {
+            "Blur Background": "blur",
+            "Grayscale": "grayscale",
+            "White Background": "white"
+        }
+        
+        # Process button
+        if st.button("Apply Effect", type="primary"):
+            with st.spinner("Applying effect..."):
+                try:
+                    # Apply effect
+                    output_image = apply_simple_background_effect(
+                        image, 
+                        effect_map[effect_type]
+                    )
+                    
+                    # Display result
+                    with col2:
+                        st.subheader("Effect Applied")
+                        st.image(output_image, use_column_width=True)
+                        display_image_info(output_image)
+                    
+                    # Download button
+                    img_bytes = pil_to_bytes(output_image)
+                    st.success("Effect applied successfully!")
+                    st.download_button(
+                        label="Download Image",
+                        data=img_bytes.getvalue(),
+                        file_name=f"effect_{effect_map[effect_type]}.png",
                         mime="image/png"
                     )
                     
@@ -153,28 +268,30 @@ elif tool_choice == "📐 Image Resizing":
             
         elif resize_method == "Custom Dimensions":
             col1, col2 = st.columns(2)
+            
+            maintain_ratio = st.checkbox("Maintain aspect ratio", value=True)
+            
             with col1:
                 new_width = st.number_input(
                     "Width (px)",
                     min_value=1,
                     max_value=10000,
-                    value=image.width
+                    value=image.width,
+                    key="width_input"
                 )
             with col2:
-                new_height = st.number_input(
-                    "Height (px)",
-                    min_value=1,
-                    max_value=10000,
-                    value=image.height
-                )
-            
-            maintain_ratio = st.checkbox("Maintain aspect ratio", value=True)
-            if maintain_ratio:
-                aspect_ratio = image.width / image.height
-                if st.session_state.get('last_changed') == 'width':
+                if maintain_ratio:
+                    aspect_ratio = image.width / image.height
                     new_height = int(new_width / aspect_ratio)
+                    st.metric("Height (px)", new_height)
                 else:
-                    new_width = int(new_height * aspect_ratio)
+                    new_height = st.number_input(
+                        "Height (px)",
+                        min_value=1,
+                        max_value=10000,
+                        value=image.height,
+                        key="height_input"
+                    )
         
         else:  # Preset Sizes
             preset = st.selectbox(
@@ -208,6 +325,16 @@ elif tool_choice == "📐 Image Resizing":
         
         # Show preview dimensions
         st.info(f"New dimensions: {new_width} x {new_height} px")
+        
+        # Calculate size reduction
+        original_pixels = image.width * image.height
+        new_pixels = new_width * new_height
+        size_change = ((new_pixels - original_pixels) / original_pixels) * 100
+        
+        if size_change < 0:
+            st.caption(f"📉 Image will be reduced by {abs(size_change):.1f}%")
+        elif size_change > 0:
+            st.caption(f"📈 Image will be enlarged by {size_change:.1f}%")
         
         # Resize button
         if st.button("Resize Image", type="primary"):
@@ -274,12 +401,16 @@ else:  # Format Conversion
             "TIFF": {"extension": "tiff", "mime": "image/tiff", "supports_transparency": True}
         }
         
+        current_format = image.format if image.format else "Unknown"
+        st.caption(f"Current format: {current_format}")
+        
         target_format = st.selectbox(
             "Select target format:",
             list(formats.keys())
         )
         
         # Show format-specific options
+        quality = None
         if target_format == "JPEG":
             quality = st.slider(
                 "JPEG Quality:",
@@ -296,13 +427,21 @@ else:  # Format Conversion
                 value=80,
                 help="Higher values mean better quality but larger file size"
             )
-        else:
-            quality = None
         
         # Handle transparency
+        bg_color = "#FFFFFF"
         if image.mode == "RGBA" and not formats[target_format]["supports_transparency"]:
             st.warning(f"⚠️ {target_format} doesn't support transparency. The transparent areas will be filled with the background color.")
             bg_color = st.color_picker("Choose background color for transparent areas:", "#FFFFFF")
+        
+        # Show format comparison
+        with st.expander("Format Comparison"):
+            st.markdown(f"""
+            **{target_format} Format Characteristics:**
+            - Transparency support: {'✅ Yes' if formats[target_format]["supports_transparency"] else '❌ No'}
+            - Compression: {'Lossy' if target_format in ['JPEG', 'WebP'] else 'Lossless'}
+            - Best for: {'Photos' if target_format == 'JPEG' else 'Graphics with transparency' if target_format == 'PNG' else 'Web images' if target_format == 'WebP' else 'General use'}
+            """)
         
         # Convert button
         if st.button("Convert Image", type="primary"):
@@ -327,8 +466,13 @@ else:  # Format Conversion
                 output = io.BytesIO()
                 if target_format == "JPEG":
                     # Ensure RGB mode for JPEG
-                    if converted_image.mode != "RGB":
+                    if converted_image.mode not in ["RGB", "L"]:
                         converted_image = converted_image.convert("RGB")
+                elif target_format == "BMP":
+                    # BMP doesn't support RGBA, convert to RGB
+                    if converted_image.mode == "RGBA":
+                        converted_image = converted_image.convert("RGB")
+                
                 converted_image.save(output, format=target_format, **save_params)
                 output.seek(0)
                 
@@ -364,8 +508,35 @@ st.divider()
 st.markdown(
     """
     <div style='text-align: center; color: gray;'>
-        Made with ❤️ By Adnan Akram | Image Manipulation Studio
+        <p>Made with ❤️ By Adnan Akram | Image Manipulation Studio</p>
+        <p style='font-size: 0.8em;'>For advanced background removal, install 'rembg' package</p>
     </div>
     """,
     unsafe_allow_html=True
 )
+```
+
+**Option 2: If you want to try installing rembg separately:**
+
+```bash
+# First, install the basic requirements
+pip install streamlit==1.31.0 Pillow==10.2.0 numpy==1.24.3
+
+# Then try installing rembg separately
+pip install rembg[gpu]  # For GPU support
+# OR
+pip install rembg  # For CPU only
+```
+
+**Option 3: Alternative requirements.txt with specific versions:**
+
+```txt
+streamlit==1.31.0
+Pillow==10.2.0
+numpy==1.24.3
+onnxruntime==1.16.0
+opencv-python-headless==4.8.1.78
+rembg==2.0.50
+```
+
+The updated application will work with or without `rembg`. If `rembg` is not installed, it will offer simple background effects instead of ML-based background removal. All other features (resizing and format conversion) will work normally.
