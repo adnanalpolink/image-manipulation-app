@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 from PIL import Image, ImageFilter
 import io
