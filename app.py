@@ -1,17 +1,3 @@
-I see you're having issues with the requirements installation. The `rembg` library can sometimes be problematic due to its dependencies. Let me provide you with an updated version that has more flexible dependencies and includes an alternative approach:
-
-**Option 1: Simplified Version (without background removal)**
-
-First, let's try a simplified `requirements.txt`:
-
-```txt
-streamlit==1.31.0
-Pillow==10.2.0
-numpy==1.24.3
-```
-
-And here's the updated application code with optional background removal:
-
 ```python
 import streamlit as st
 from PIL import Image, ImageFilter
@@ -514,29 +500,3 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-```
-
-**Option 2: If you want to try installing rembg separately:**
-
-```bash
-# First, install the basic requirements
-pip install streamlit==1.31.0 Pillow==10.2.0 numpy==1.24.3
-
-# Then try installing rembg separately
-pip install rembg[gpu]  # For GPU support
-# OR
-pip install rembg  # For CPU only
-```
-
-**Option 3: Alternative requirements.txt with specific versions:**
-
-```txt
-streamlit==1.31.0
-Pillow==10.2.0
-numpy==1.24.3
-onnxruntime==1.16.0
-opencv-python-headless==4.8.1.78
-rembg==2.0.50
-```
-
-The updated application will work with or without `rembg`. If `rembg` is not installed, it will offer simple background effects instead of ML-based background removal. All other features (resizing and format conversion) will work normally.
